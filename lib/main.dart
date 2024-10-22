@@ -19,6 +19,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// aquarium_screen.dart
 class AquariumScreen extends StatefulWidget {
   @override
   _AquariumScreenState createState() => _AquariumScreenState();
@@ -26,6 +27,35 @@ class AquariumScreen extends StatefulWidget {
 
 class _AquariumScreenState extends State<AquariumScreen> {
   List<Fish> fishList = [];
+  late SharedPreferences prefs;
+  Color selectedColor = Colors.blue; // Default color
+  double selectedSpeed = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  _loadPreferences() async {
+    prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // Load color and ensure it's one of the predefined colors
+      int? colorValue = prefs.getInt('color');
+      if (colorValue != null) {
+        selectedColor = Color(colorValue);
+      }
+
+      // Load speed
+      selectedSpeed = prefs.getDouble('speed') ?? 1.0;
+    });
+  }
+
+  _savePreferences() async {
+    await prefs.setInt('color', selectedColor.value);
+    await prefs.setDouble('speed', selectedSpeed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,10 +67,12 @@ class _AquariumScreenState extends State<AquariumScreen> {
           Expanded(
             child: Container(
               width: 300,
-              height: 300,
+              height: 600,
               color: Colors.lightBlueAccent,
               child: Stack(
-                children: fishList.map((fish) => AnimatedFish(fish: fish)).toList(),
+                children: fishList
+                    .map((fish) => AnimatedFish(fish: fish, containerWidth: 300, containerHeight: 600))
+                    .toList(),
               ),
             ),
           ),
@@ -48,8 +80,60 @@ class _AquariumScreenState extends State<AquariumScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton(
-                onPressed: addFish, 
+                onPressed: addFish,
                 child: Text('Add Fish'),
+              ),
+              SizedBox(width: 20),
+              Text('Speed:'),
+              Slider(
+                value: selectedSpeed,
+                min: 0.5,
+                max: 3.0,
+                divisions: 5,
+                label: selectedSpeed.toString(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedSpeed = value;
+                  });
+                },
+              ),
+              SizedBox(width: 20),
+              Text('Color:'),
+              DropdownButton<Color>(
+                value: selectedColor,
+                onChanged: (Color? newColor) {
+                  setState(() {
+                    if (newColor != null) {
+                      selectedColor = newColor;
+                    }
+                  });
+                },
+                items: [
+                  DropdownMenuItem<Color>(
+                    value: Colors.blue,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  DropdownMenuItem<Color>(
+                    value: Colors.red,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      color: Colors.red,
+                    ),
+                  ),
+                  DropdownMenuItem<Color>(
+                    value: Colors.green,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -58,26 +142,27 @@ class _AquariumScreenState extends State<AquariumScreen> {
     );
   }
 
-  void addFish(){
-    if(fishList.length <10){
-      setState(() {
-        fishList.add(Fish(color: Colors.blue, speed: 1.0));
-      });
-    }
+  void addFish() {
+    setState(() {
+      fishList.add(Fish(color: selectedColor, speed: selectedSpeed));
+      _savePreferences();
+    });
   }
 }
 
-
-class Fish{
+class Fish {
   final Color color;
   final double speed;
+
   Fish({required this.color, required this.speed});
 }
 
 class AnimatedFish extends StatefulWidget {
   final Fish fish;
+  final double containerWidth;
+  final double containerHeight;
 
-  AnimatedFish({required this.fish});
+  AnimatedFish({required this.fish, required this.containerWidth, required this.containerHeight});
 
   @override
   _AnimatedFishState createState() => _AnimatedFishState();
@@ -87,9 +172,6 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
   late AnimationController _controller;
   late Animation<Offset> _position;
 
-  final double aquariumWidth = 300; 
-  final double aquariumHeight = 300;
-
   Offset currentPosition = Offset(0, 0);
   Offset destination = Offset(0, 0);
 
@@ -98,21 +180,21 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
     super.initState();
 
     currentPosition = Offset(
-      Random().nextDouble() * aquariumWidth,
-      Random().nextDouble() * aquariumHeight,
+      Random().nextDouble() * widget.containerWidth,
+      Random().nextDouble() * widget.containerHeight,
     );
 
     destination = _getRandomPosition();
 
     _controller = AnimationController(
-      duration: Duration(seconds: (5 / widget.fish.speed).round()), 
+      duration: Duration(seconds: (5 / widget.fish.speed).round()),
       vsync: this,
     )..forward();
 
     _position = Tween<Offset>(begin: currentPosition, end: destination)
         .animate(CurvedAnimation(parent: _controller, curve: Curves.linear))
       ..addListener(() {
-        setState(() {});  
+        setState(() {});
       });
 
     _controller.addStatusListener((status) {
@@ -122,23 +204,19 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
     });
   }
 
-  
   Offset _getRandomPosition() {
     return Offset(
-      Random().nextDouble() * (aquariumWidth - 20),
-      Random().nextDouble() * (aquariumHeight - 20), 
+      Random().nextDouble() * (widget.containerWidth - 20),
+      Random().nextDouble() * (widget.containerHeight - 20),
     );
   }
 
-  
   void _setNewDestination() {
     setState(() {
       currentPosition = destination;
-      destination = _getRandomPosition();  
-
+      destination = _getRandomPosition();
       _position = Tween<Offset>(begin: currentPosition, end: destination)
           .animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
-
       _controller.forward(from: 0);
     });
   }
