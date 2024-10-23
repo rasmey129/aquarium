@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AquariumScreen extends StatefulWidget {
   @override
@@ -13,12 +14,14 @@ class _AquariumScreenState extends State<AquariumScreen> {
   Color selectedColor = Colors.blue; 
   double selectedSpeed = 1.0;
   int fishCount = 0;
+  SharedPreferences? prefs;
 
   @override
   void initState() {
     super.initState();
     dbHelper = DatabaseHelper.instance;
     _loadSettings();
+    _loadFromSharedPreferences();  
   }
 
   _loadSettings() async {
@@ -39,6 +42,26 @@ class _AquariumScreenState extends State<AquariumScreen> {
     }
   }
 
+  _loadFromSharedPreferences() async {
+    prefs = await SharedPreferences.getInstance();
+    fishCount = prefs?.getInt('fishCount') ?? 0;
+    selectedSpeed = prefs?.getDouble('fishSpeed') ?? 1.0;
+    int colorValue = prefs?.getInt('defaultColor') ?? Colors.blue.value;
+    selectedColor = Color(colorValue);
+
+    fishList = []; // Clear the list before loading
+    for (int i = 0; i < fishCount; i++) {
+      String fishKeyColor = 'fishColor_$i';
+      String fishKeySpeed = 'fishSpeed_$i';
+      Color fishColor = Color(prefs?.getInt(fishKeyColor) ?? selectedColor.value);
+      double fishSpeed = prefs?.getDouble(fishKeySpeed) ?? selectedSpeed;
+
+      fishList.add(Fish(color: fishColor, speed: fishSpeed));
+    }
+
+    setState(() {});
+  }
+
   _saveSettings() async {
     Map<String, dynamic> row = {
       DatabaseHelper.columnFishCount: fishCount,
@@ -46,6 +69,35 @@ class _AquariumScreenState extends State<AquariumScreen> {
       DatabaseHelper.columnDefaultColor: selectedColor.value,
     };
     await dbHelper.insert(row);
+    await _saveToSharedPreferences(); 
+  }
+
+  _saveToSharedPreferences() async {
+    if (prefs != null) {
+      await prefs!.setInt('fishCount', fishCount);
+      await prefs!.setDouble('fishSpeed', selectedSpeed);
+      await prefs!.setInt('defaultColor', selectedColor.value);
+
+      // Save each fish's attributes
+      for (int i = 0; i < fishList.length; i++) {
+        await prefs!.setInt('fishColor_$i', fishList[i].color.value);
+        await prefs!.setDouble('fishSpeed_$i', fishList[i].speed);
+      }
+
+      // Clear any old data if fish count changes
+      for (int i = fishList.length; i < fishCount; i++) {
+        await prefs!.remove('fishColor_$i');
+        await prefs!.remove('fishSpeed_$i');
+      }
+    }
+  }
+
+  void resetFishes() {
+    setState(() {
+      fishList.clear(); // Clear the fish list
+      fishCount = 0; // Reset the fish count
+      _saveSettings(); // Save the changes to the database and shared preferences
+    });
   }
 
   @override
@@ -62,7 +114,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
             height: 300,
             decoration: BoxDecoration(
               color: Colors.lightBlueAccent,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(15), 
               border: Border.all(color: Colors.blueAccent, width: 2), 
             ),
             child: Stack(
@@ -90,6 +142,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
                 onChanged: (value) {
                   setState(() {
                     selectedSpeed = value;
+                    _saveSettings();
                   });
                 },
               ),
@@ -133,6 +186,11 @@ class _AquariumScreenState extends State<AquariumScreen> {
               ),
             ],
           ),
+          SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: resetFishes, // Call resetFishes on button press
+            child: Text('Reset Fishes'),
+          ),
         ],
       ),
     );
@@ -140,7 +198,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
 
   void addFish() {
     setState(() {
-      fishList.add(Fish(color: selectedColor, speed: selectedSpeed));
+      fishList.add(Fish(color: selectedColor, speed: selectedSpeed)); // Use selectedSpeed here
       fishCount++;
       _saveSettings();
     });
@@ -175,30 +233,9 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-
-    currentPosition = Offset(
-      Random().nextDouble() * widget.containerWidth,
-      Random().nextDouble() * widget.containerHeight,
-    );
-
+    currentPosition = _getRandomPosition();
     destination = _getRandomPosition();
-
-    _controller = AnimationController(
-      duration: Duration(seconds: (5 / widget.fish.speed).round()),
-      vsync: this,
-    )..forward();
-
-    _position = Tween<Offset>(begin: currentPosition, end: destination)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.linear))
-      ..addListener(() {
-        setState(() {});
-      });
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _setNewDestination();
-      }
-    });
+    _initializeAnimation();
   }
 
   Offset _getRandomPosition() {
@@ -208,21 +245,54 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
     );
   }
 
-  void _setNewDestination() {
-    setState(() {
-      currentPosition = destination;
-      destination = _getRandomPosition();
-      _position = Tween<Offset>(begin: currentPosition, end: destination)
-          .animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
-      _controller.forward(from: 0);
-    });
+  void _initializeAnimation() {
+    // Use a fixed base duration and modify it by the speed
+    // Lower speed = longer duration, Higher speed = shorter duration
+    int baseDuration = (2000 / widget.fish.speed).toInt(); // 2 seconds base duration
+    
+    _controller = AnimationController(
+      duration: Duration(milliseconds: baseDuration),
+      vsync: this,
+    );
+
+    _position = Tween<Offset>(begin: currentPosition, end: destination)
+        .animate(CurvedAnimation(parent: _controller, curve: Curves.linear))
+      ..addListener(() {
+        setState(() {
+          currentPosition = _position.value;
+
+          if (currentPosition.dx < 0 || currentPosition.dx > widget.containerWidth - 20 ||
+              currentPosition.dy < 0 || currentPosition.dy > widget.containerHeight - 20) {
+            _changeDirection();
+          }
+
+          if (_controller.isCompleted) {
+            _changeDirection();
+          }
+        });
+      });
+
+    _controller.forward();
+  }
+
+  void _changeDirection() {
+    destination = _getRandomPosition();
+    
+    // Use the same duration calculation as in _initializeAnimation
+    int baseDuration = (2000 / widget.fish.speed).toInt();
+    _controller.duration = Duration(milliseconds: baseDuration);
+    
+    _position = Tween<Offset>(begin: currentPosition, end: destination)
+        .animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
+
+    _controller.forward(from: 0);
   }
 
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: _position.value.dx,
-      top: _position.value.dy,
+      left: currentPosition.dx,
+      top: currentPosition.dy,
       child: Container(
         width: 20,
         height: 20,

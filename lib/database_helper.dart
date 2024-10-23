@@ -23,17 +23,32 @@ class DatabaseHelper {
 
   _createDB(Database db, int version) async {
     await db.execute('''
-          CREATE TABLE $tableSettings (
-            $columnFishCount INTEGER,
-            $columnFishSpeed REAL,
-            $columnDefaultColor INTEGER
-          )
-          ''');
+      CREATE TABLE $tableSettings (
+        $columnFishCount INTEGER,
+        $columnFishSpeed REAL,
+        $columnDefaultColor INTEGER
+      )
+    ''');
   }
 
   Future<int> insert(Map<String, dynamic> row) async {
     Database db = await database;
-    return await db.insert(tableSettings, row);
+    final existingRows = await queryAllRows();
+    if (existingRows.isNotEmpty) {
+      return await update(row); 
+    } else {
+      return await db.insert(tableSettings, row); 
+    }
+  }
+
+  Future<int> update(Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update(
+      tableSettings,
+      row,
+      where: '$columnFishCount = ?',
+      whereArgs: [row[columnFishCount]],
+    );
   }
 
   Future<List<Map<String, dynamic>>> queryAllRows() async {
