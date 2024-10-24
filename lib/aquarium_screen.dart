@@ -49,7 +49,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
     int colorValue = prefs?.getInt('defaultColor') ?? Colors.blue.value;
     selectedColor = Color(colorValue);
 
-    fishList = []; // Clear the list before loading
+    fishList = []; 
     for (int i = 0; i < fishCount; i++) {
       String fishKeyColor = 'fishColor_$i';
       String fishKeySpeed = 'fishSpeed_$i';
@@ -78,13 +78,13 @@ class _AquariumScreenState extends State<AquariumScreen> {
       await prefs!.setDouble('fishSpeed', selectedSpeed);
       await prefs!.setInt('defaultColor', selectedColor.value);
 
-      // Save each fish's attributes
+      
       for (int i = 0; i < fishList.length; i++) {
         await prefs!.setInt('fishColor_$i', fishList[i].color.value);
         await prefs!.setDouble('fishSpeed_$i', fishList[i].speed);
       }
 
-      // Clear any old data if fish count changes
+      
       for (int i = fishList.length; i < fishCount; i++) {
         await prefs!.remove('fishColor_$i');
         await prefs!.remove('fishSpeed_$i');
@@ -94,9 +94,9 @@ class _AquariumScreenState extends State<AquariumScreen> {
 
   void resetFishes() {
     setState(() {
-      fishList.clear(); // Clear the fish list
-      fishCount = 0; // Reset the fish count
-      _saveSettings(); // Save the changes to the database and shared preferences
+      fishList.clear();
+      fishCount = 0; 
+      _saveSettings(); 
     });
   }
 
@@ -188,7 +188,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
           ),
           SizedBox(height: 20),
           ElevatedButton(
-            onPressed: resetFishes, // Call resetFishes on button press
+            onPressed: resetFishes, 
             child: Text('Reset Fishes'),
           ),
         ],
@@ -198,7 +198,7 @@ class _AquariumScreenState extends State<AquariumScreen> {
 
   void addFish() {
     setState(() {
-      fishList.add(Fish(color: selectedColor, speed: selectedSpeed)); // Use selectedSpeed here
+      fishList.add(Fish(color: selectedColor, speed: selectedSpeed)); 
       fishCount++;
       _saveSettings();
     });
@@ -246,9 +246,8 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
   }
 
   void _initializeAnimation() {
-    // Use a fixed base duration and modify it by the speed
-    // Lower speed = longer duration, Higher speed = shorter duration
-    int baseDuration = (2000 / widget.fish.speed).toInt(); // 2 seconds base duration
+   
+    int baseDuration = (2000 / widget.fish.speed).toInt(); 
     
     _controller = AnimationController(
       duration: Duration(milliseconds: baseDuration),
@@ -278,7 +277,7 @@ class _AnimatedFishState extends State<AnimatedFish> with SingleTickerProviderSt
   void _changeDirection() {
     destination = _getRandomPosition();
     
-    // Use the same duration calculation as in _initializeAnimation
+    
     int baseDuration = (2000 / widget.fish.speed).toInt();
     _controller.duration = Duration(milliseconds: baseDuration);
     
